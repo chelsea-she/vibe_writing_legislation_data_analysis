@@ -14,6 +14,7 @@ stance = pipeline("zero-shot-classification", model="roberta-large-mnli")
 
 
 def get_stance_difference(pre_writing, writing):
+    trunc_pre = pre_writing
     if len(pre_writing) > 490:
         trunc_pre = pre_writing[:490]
     result = stance(
@@ -32,6 +33,7 @@ nli_model = AutoModelForSequenceClassification.from_pretrained("roberta-large-mn
 
 
 def get_NLI(pre_writing, writing):
+    trunc_pre = pre_writing
     if len(pre_writing) > 490:
         trunc_pre = pre_writing[:490]
         inputs = nli_tokenizer.encode_plus(

@@ -200,15 +200,12 @@ def compute_validity(session_id, actions_lst):
     for idx, action in enumerate(actions_lst):
         level_1_action_type = action.get("level_1_action_type", "")
         # action_delta = action.get("action_delta", "")
-        action_end_writing = action.get("action_end_writing", "")
+        human_sentences_temporal = action.get("human_sentences_temporal_order", "")
         # level_2_insertion_type = action.get("level_2_insertion_type", "")
 
         # Handle AI inserts
-        if (
-            level_1_action_type in ["insert_text_ai", "insert_text_human"]
-            and action_end_writing
-        ):
-            insert = action["action_end_writing"]
+        if level_1_action_type == "insert_text_human" and human_sentences_temporal:
+            insert = action["human_sentences_temporal_order"]
             insert_embedding = encoding_model.encode(insert, convert_to_tensor=True)
             score = util.pytorch_cos_sim(insert_embedding, background_embedding).item()
             action["validity_score"] = round(score, 4)
@@ -312,12 +309,12 @@ def compute_confidence_linguistic(actions_lst):
         level_1_action_type = action.get("level_1_action_type", "")
         level_2_insertion_type = action.get("level_2_insertion_type", "")
 
-        if level_1_action_type == "insert_text_ai" or (
+        if (
             level_1_action_type == "insert_text_human"
             and level_2_insertion_type
             and "major_insert" in level_2_insertion_type
         ):
-            human_insert = action["action_end_writing"]
+            human_insert = action["human_sentences_temporal_order"]
             text_lower = human_insert.lower()
             hedges = sum(text_lower.count(term) for term in hedging_terms)
             strengths = sum(

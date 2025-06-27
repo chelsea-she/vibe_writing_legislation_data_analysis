@@ -74,7 +74,7 @@ def custom_serializer(obj):
 
 def get_filename(folder_name, session_id):
     file_name = jsonl_names[session_id[:-2]][int(session_id[-1]) - 1]
-    return "pilot1_raw_logs/" + folder_name + file_name + ".jsonl"
+    return "pilot_raw_logs/" + folder_name + file_name + ".jsonl"
 
 
 background_info = [

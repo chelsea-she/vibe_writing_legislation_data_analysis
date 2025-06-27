@@ -14,7 +14,7 @@ import os
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Paths to the metadata CSV files
-csv_path = os.path.join(script_dir, "legislation_pilot1.csv")
+csv_path = os.path.join(script_dir, "legislation_pilot2.csv")
 
 # Load the metadata from the CSV files
 legislation_csv = pd.read_csv(csv_path)
@@ -106,10 +106,10 @@ def get_logs(jsonl_names_dict, logs_folder_path):
 
 # Define the path to the folder containing JSONL files
 # The 'coauthor-v1.0' folder was downloaded directly from the CoAuthor website.
-folder_path_to_logs = os.path.join(script_dir, "pilot1_raw_logs")
+folder_path_to_logs = os.path.join(script_dir, "pilot_raw_logs")
 
 # Define the output path for raw logs
-output_file_path = os.path.join(script_dir, "pilot1_logs.json")
+output_file_path = os.path.join(script_dir, "pilot2_logs.json")
 
 try:
     # Get raw logs
