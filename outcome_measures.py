@@ -214,41 +214,6 @@ def compute_validity(session_id, actions_lst):
 ##### End of Validity Helper Functions #####
 
 ##### Helper functions for Confidence in Writing #####
-hedging_terms = [
-    "might",
-    "may",
-    "could",
-    "can",
-    "seems",
-    "appears",
-    "suggests",
-    "indicates",
-    "possibly",
-    "probably",
-    "likely",
-    "unlikely",
-    "relatively",
-    "generally",
-    "often",
-    "sometimes",
-    "somewhat",
-    "apparently",
-    "arguably",
-    "purportedly",
-    "assumed",
-    "supposedly",
-    "tentatively",
-    "it is possible that",
-    "may be",
-    "it seems that",
-    "in some cases",
-    "to some extent",
-    "there is a chance",
-    "one could say",
-    "not necessarily",
-    "in certain contexts",
-]
-
 strong_modals = [
     "must",
     "will",
@@ -275,6 +240,7 @@ strong_modals = [
     "this confirms",
     "this illustrates",
     "as a fact",
+    "this reveals that",
 ]
 
 stance_markers = [
@@ -301,6 +267,14 @@ stance_markers = [
     "what I see is",
     "I would argue",
     "I take the position that",
+    "some believe that",
+    "others argue that",
+    "it is widely believed that",
+    "critics argue",
+    "proponents claim",
+    "there is a growing debate",
+    "this reveals that",
+    "this raises questions about",
 ]
 
 
@@ -316,12 +290,11 @@ def compute_confidence_linguistic(actions_lst):
         ):
             human_insert = action["human_sentences_temporal_order"]
             text_lower = human_insert.lower()
-            hedges = sum(text_lower.count(term) for term in hedging_terms)
             strengths = sum(
                 text_lower.count(term) for term in strong_modals + stance_markers
             )
 
-            score = (strengths - hedges) / (len(human_insert.split()) + 1)
+            score = (strengths) / (len(human_insert.split()) + 1)
             action["confidence_score"] = round(score, 4)
 
 

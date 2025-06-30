@@ -8,6 +8,10 @@ from sentence_transformers import SentenceTransformer, util
 
 from parascore import ParaScorer
 
+import spacy
+from spacy.lang.en import English
+from spacy.matcher import PhraseMatcher
+
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 stance = pipeline("zero-shot-classification", model="roberta-large-mnli")
@@ -163,8 +167,8 @@ def get_relevant_background_info(session_id, writing):
 
 
 def parse_level_2_constructive_learning(repeat_dict, writing):
-    writing_sentences = utils.sent_tokenize(writing)
-    num_sentences = len(writing_sentences)
+    # writing_sentences = utils.sent_tokenize(writing)
+    num_sentences = len(writing)
     return round(len(repeat_dict) / num_sentences, 2)
 
 
@@ -206,3 +210,112 @@ def parse_level_2_paraphrase_depth(parascore_dict):
 
     total_score = sum(data["score_avg"] for data in parascore_dict.values())
     return round(total_score / len(parascore_dict), 2)
+
+
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
+
+# Trigger phrases that often signal external examples
+trigger_phrases = [
+    "according to",
+    "a study",
+    "a study found",
+    "research shows",
+    "evidence indicates",
+    "in [year]",
+    "historically",
+    "data indicates",
+    "during [event]",
+    "a recent report",
+    "the [organization] found",
+    "a survey found",
+    "statistics show",
+    "the [Supreme Court/DOJ/Company] argues",
+    "for example",
+    "for instance",
+    "such as",
+    "consider",
+    "namely",
+    "to illustrate",
+    "an example of this is",
+    "over [number]%",
+    "the majority of",
+    "a large portion",
+    "more than",
+    "less than",
+    "a significant number",
+    "critics argue",
+    "proponents claim",
+    "others argue",
+    "some believe that",
+]
+
+# Build trigger matcher
+matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+patterns = [nlp.make_doc(text) for text in trigger_phrases]
+matcher.add("TriggerPhrase", patterns)
+
+
+def get_external_example(essay):
+    # Process text
+    doc = nlp(essay)
+
+    # Split into sentences
+    sentences = list(doc.sents)
+
+    results_dict = {}
+
+    # Analyze each sentence
+    for sent in sentences:
+        sent_doc = nlp(sent.text)
+
+        # NER entities
+        entities = [ent.label_ for ent in sent_doc.ents]
+        entity_types = set(entities)
+
+        # Count proper nouns
+        proper_nouns = [token.text for token in sent_doc if token.pos_ == "PROPN"]
+        proper_noun_count = len(proper_nouns)
+
+        # Check trigger phrases
+        matches = matcher(sent_doc)
+        has_trigger = len(matches) > 0
+
+        # Decision rules
+        if (
+            entity_types.intersection(
+                {"PERSON", "ORG", "DATE", "EVENT", "LAW", "GPE", "WORK_OF_ART"}
+            )
+            or proper_noun_count >= 2
+            or has_trigger
+        ):
+            external = True
+        else:
+            external = False
+
+        results_dict[sent.text.strip()] = {
+            "entities": entities,
+            "proper_nouns": proper_nouns,
+            "has_trigger": has_trigger,
+            "external_example": external,
+        }
+    return results_dict
+
+
+def parse_level_2_external_examples(external_dict):
+    if not external_dict:
+        return 0
+
+    # Count sentences with external examples
+    external_count = sum(
+        1 for data in external_dict.values() if data["external_example"]
+    )
+
+    # Total sentences
+    total_sentences = len(external_dict)
+
+    # Calculate percentage
+    if total_sentences == 0:
+        return 0.0
+
+    return round(external_count / total_sentences, 2)
