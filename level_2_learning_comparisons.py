@@ -141,7 +141,7 @@ def get_relevant_background_info(session_id, writing):
     similarities = util.pytorch_cos_sim(embeddings_a, embeddings_b)
 
     # Step 4: Flag matches
-    threshold = 0.75
+    threshold = 0.5
     repeats = []
 
     for i, row in enumerate(similarities):
@@ -286,7 +286,7 @@ def get_external_example(essay):
             entity_types.intersection(
                 {"PERSON", "ORG", "DATE", "EVENT", "LAW", "GPE", "WORK_OF_ART"}
             )
-            or proper_noun_count >= 2
+            or proper_noun_count >= 1
             or has_trigger
         ):
             external = True
@@ -319,3 +319,83 @@ def parse_level_2_external_examples(external_dict):
         return 0.0
 
     return round(external_count / total_sentences, 2)
+
+
+def get_relevant_past_suggestions(past_suggestions, writing):
+    # Step 2: Embed all sentences
+    embeddings_a = embedding_model.encode(past_suggestions, convert_to_tensor=True)
+    embeddings_b = embedding_model.encode(writing, convert_to_tensor=True)
+
+    # Step 3: Compare every sentence from A with every sentence from B
+    similarities = util.pytorch_cos_sim(embeddings_a, embeddings_b)
+
+    # Step 4: Flag matches
+    threshold = 0.5
+    repeats = []
+
+    for i, row in enumerate(similarities):
+        for j, score in enumerate(row):
+            if score > threshold:
+                repeats.append((past_suggestions[i], writing[j], float(score)))
+
+    # Output repeated ideas
+    repeat_dict = {}
+    for a, b, score in repeats:
+        if b in repeat_dict:
+            repeat_dict[b]["count"] += 1
+            repeat_dict[b]["scores"].append(score)
+            repeat_dict[b]["ai_suggestions"].append(a)
+        else:
+            repeat_dict[b] = {
+                "count": 1,
+                "scores": [score],
+                "ai_suggestions": [a],
+            }
+            # print(f"\nText A: {a}\nText B: {b}\nSimilarity: {score:.2f}")
+    return repeat_dict
+
+
+def get_paraphrase_depth_suggestions(repeat_dict):
+    if not repeat_dict:
+        return 0
+
+    parascore_dict = {}
+
+    for writing_sentence, info in repeat_dict.items():
+        for suggestion in info["ai_suggestions"]:
+            # Both inputs must be lists
+            score = float(scorer.score([suggestion], [writing_sentence])[0])
+
+            if writing_sentence in parascore_dict:
+                parascore_dict[writing_sentence]["scores"].append(score)
+                parascore_dict[writing_sentence]["score_sum"] += score
+            else:
+                parascore_dict[writing_sentence] = {
+                    "scores": [score],
+                    "score_sum": score,
+                }
+
+    # Average scores for each writing sentence
+    for sentence_data in parascore_dict.values():
+        sentence_data["score_avg"] = round(
+            sentence_data["score_sum"] / len(sentence_data["scores"]), 2
+        )
+
+    return parascore_dict
+
+
+from transformers import pipeline
+
+classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+
+
+def classify_text(text):
+    result = classifier(
+        text,
+        candidate_labels=["question", "imperative", "statement"],
+    )
+    return {
+        "question": result["scores"][0],
+        "imperative": result["scores"][1],
+        "statement": result["scores"][2],
+    }
