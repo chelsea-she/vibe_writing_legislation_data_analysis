@@ -399,3 +399,12 @@ def classify_text(text):
         "imperative": result["scores"][1],
         "statement": result["scores"][2],
     }
+
+
+def parse_classify_text(items):
+    sorted_labels = sorted(items, key=lambda x: x[1], reverse=True)
+    top_label, top_score = sorted_labels[0]
+    second_label, second_score = sorted_labels[1]
+    if top_score >= 0.65 and (top_score - second_score) >= 0.15:
+        return {top_label: top_score}
+    return ""
