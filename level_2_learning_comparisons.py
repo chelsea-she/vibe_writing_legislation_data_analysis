@@ -12,6 +12,10 @@ import spacy
 from spacy.lang.en import English
 from spacy.matcher import PhraseMatcher
 
+from sklearn.feature_extraction.text import CountVectorizer
+from collections import defaultdict
+import re
+
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 stance = pipeline("zero-shot-classification", model="roberta-large-mnli")
@@ -222,6 +226,9 @@ trigger_phrases = [
     "a study found",
     "research shows",
     "evidence indicates",
+    "suggests",
+    "appears",
+    "indicates",
     "in [year]",
     "historically",
     "data indicates",
@@ -384,27 +391,298 @@ def get_paraphrase_depth_suggestions(repeat_dict):
     return parascore_dict
 
 
-from transformers import pipeline
-
-classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+classifier_text = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
 
 def classify_text(text):
-    result = classifier(
+    result = classifier_text(
         text,
         candidate_labels=["question", "imperative", "statement"],
     )
-    return {
-        "question": result["scores"][0],
-        "imperative": result["scores"][1],
-        "statement": result["scores"][2],
-    }
+    return dict(zip(result["labels"], result["scores"]))
 
 
-def parse_classify_text(items):
-    sorted_labels = sorted(items, key=lambda x: x[1], reverse=True)
+def parse_classify_text(items_dict):
+    sorted_labels = sorted(items_dict.items(), key=lambda x: x[1], reverse=True)
     top_label, top_score = sorted_labels[0]
     second_label, second_score = sorted_labels[1]
+
     if top_score >= 0.65 and (top_score - second_score) >= 0.15:
         return {top_label: top_score}
     return ""
+
+
+#### CHECK FOR MULTIPLE PERSPECTIVES ####
+connective_categories = {
+    "Contingency_Cause": [
+        "because",
+        "because of",
+        "due to",
+        "so",
+        "consequently",
+        "therefore",
+        "thus",
+        "accordingly",
+        "hence",
+        "as a result",
+        "thereby",
+        "that’s why",
+    ],
+    "Comparison": [
+        "but",
+        "however",
+        "although",
+        "even though",
+        "though",
+        "nevertheless",
+        "nonetheless",
+        "still",
+        "yet",
+        "whereas",
+        "conversely",
+        "on the contrary",
+        "in contrast",
+        "by contrast",
+        "on the one hand",
+        "on the other hand",
+    ],
+    "Expansion_Conjunction": [
+        # "and",
+        "also",
+        "furthermore",
+        "moreover",
+        "additionally",
+        "likewise",
+        "similarly",
+        "indeed",
+        "besides",
+        "in addition",
+        "further",
+    ],
+    "Expansion_Instantiation": ["for example", "for instance", "such as"],
+    # "Expansion_Alternative": ["or", "either"],
+    "Expansion_Exception": ["except", "except that"],
+    "Expansion_Specification": ["specifically", "in particular"],
+}
+
+matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+connective_to_category = {}
+
+for category, phrases in connective_categories.items():
+    category_str = str(category)
+    patterns = [nlp.make_doc(phrase) for phrase in phrases]
+    matcher.add(category_str, patterns)  # Add matcher
+    _ = nlp.vocab.strings[
+        category_str
+    ]  # Register *after* matcher to ensure consistency
+    for phrase in phrases:
+        connective_to_category[phrase.lower()] = category_str
+
+
+def get_discourse_connectives(text_sents):
+    results = []
+
+    for sent in text_sents:
+        sent_doc = nlp(sent)
+        matches = matcher(sent_doc)
+
+        for match_id, start, end in matches:
+            span = sent_doc[start:end]
+            matched_text = span.text.lower()
+            try:
+                category = nlp.vocab.strings[match_id]
+            except KeyError:
+                category = "UNKNOWN"
+
+            results.append(
+                {
+                    "connective": matched_text,
+                    "category": category,
+                    "sentence": sent,
+                }
+            )
+
+    matches_by_sent = {}
+    for result in results:
+        if result["sentence"] in matches_by_sent:
+            matches_by_sent[result["sentence"]]["categories"].append(result["category"])
+            matches_by_sent[result["sentence"]]["connectives"].append(
+                result["connective"]
+            )
+        else:
+            matches_by_sent[result["sentence"]] = {
+                "categories": [result["category"]],
+                "connectives": [result["connective"]],
+            }
+
+    return matches_by_sent
+
+
+classifier_arg = pipeline("text-classification", model="chkla/roberta-argument")
+
+
+def classify_argument_sentences(paragraph):
+    sentences = utils.sent_tokenize(paragraph)
+    results = []
+    for sent in sentences:
+        pred = classifier_arg(sent)[0]
+        results.append(
+            {
+                "sentence": sent,
+                "is_argument": pred["label"] == "ARGUMENT",
+                "score": pred["score"],
+            }
+        )
+        print(f"'{sent}' → {pred}")
+    return [r for r in results if r["is_argument"]]
+
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def parse_argument_sentences(arguments, all_distinct_arguments):
+    num_new_args = 0
+    new_args = []
+
+    for argInfo in arguments:
+        i = 0
+        isNew = True
+        while i < len(all_distinct_arguments):
+            emb1 = model.encode(all_distinct_arguments[i], convert_to_tensor=True)
+            emb2 = model.encode(argInfo["sentence"], convert_to_tensor=True)
+
+            similarity = util.pytorch_cos_sim(emb1, emb2).item()
+            if similarity >= 0.8:
+                isNew = False
+                break
+            i += 1
+        if isNew:
+            num_new_args += 1
+            all_distinct_arguments.append(argInfo["sentence"])
+            new_args.append(argInfo["sentence"])
+
+    return {"new_arguments": new_args}
+
+
+#### CHECK FOR METACOGNITION ####
+metacognitive_verbs = [
+    "assume",
+    "discover",
+    "realize",
+    "decide",
+    "imagine",
+    "believe",
+    "know",
+    "think",
+    "guess",
+    "say",
+    "ask",
+    "tell",
+    "infer",
+    "hypothesize",
+    "conclude",
+    "doubt",
+    "interpret",
+    "predict",
+]
+first_person_pronouns = ["i", "we", "my", "me", "our", "us", "myself", "ourselves"]
+
+
+def detect_first_person_metacognitive_phrases(insert_sents):
+    matched_phrases = []
+
+    for sent in insert_sents:
+        sent_doc = nlp(sent)
+        for token in sent_doc:
+            # Check if token is a metacognitive verb
+            if token.lemma_ in metacognitive_verbs:
+                # Check for a first-person subject in its syntactic tree
+                for child in token.children:
+                    if (
+                        child.dep_ in ("nsubj", "nsubjpass")
+                        and child.text.lower() in first_person_pronouns
+                    ):
+                        matched_phrases.append({sent: child.text + " " + token.text})
+                        break
+    return matched_phrases
+
+
+#### CHECK FOR COGNITIVE & EMOTIONAL ENGAGEMENT ####
+hedge_words = [
+    "maybe",
+    "perhaps",
+    "probably",
+    "likely",
+    "arguably",
+    "suppose",
+    "seems",
+    "might",
+    "may",
+    "suggest",
+    "assume",
+]
+
+booster_words = ["definitely", "clearly", "absolutely", "certainly", "undoubtedly"]
+
+hedging_phrases = [
+    "in my opinion",
+    "i think",
+    "i believe",
+    "it seems",
+    "i don't know",
+    "i guess",
+    "you know",
+    "as far as i know",
+]
+
+
+def jaccard_similarity(set1, set2):
+    intersection = set1.intersection(set2)
+    union = set1.union(set2)
+    return len(intersection) / len(union) if union else 0
+
+
+def detect_hedging_labeled(text_sents, threshold=0.5):
+    matches_by_sent = {}
+    for sent in text_sents:
+        sent_tokens = set(re.findall(r"\b\w+\b", sent.lower()))
+        hedge_types = []
+
+        # Check hedge words
+        for word in hedge_words:
+            if word in sent_tokens:
+                hedge_types.append({"type": "hedge_word", "trigger_word": word})
+
+        # Check negated boosters
+        for booster in booster_words:
+            if f"not {booster}" in sent.lower() or f"n't {booster}" in sent.lower():
+                hedge_types.append({"type": "booster_negated", "trigger_word": booster})
+
+        # Check hedging phrases with Jaccard
+        for phrase in hedging_phrases:
+            phrase_tokens = set(phrase.split())
+            sim = jaccard_similarity(sent_tokens, phrase_tokens)
+            if sim >= threshold:
+                hedge_types.append({"type": "hedging_phrase", "trigger_word": phrase})
+
+        matches_by_sent[sent] = {"hedge_types": hedge_types}
+
+    for sent in matches_by_sent.keys():
+        matches_by_sent[sent]["hedges_count"] = len(
+            matches_by_sent[sent]["hedge_types"]
+        )
+    return matches_by_sent
+
+
+def detect_certainty(text_sents):
+    matches_by_sent = {}
+    for sent in text_sents:
+        booster_hits = []
+        for booster in booster_words:
+            if booster in sent.lower():
+                booster_hits.append(booster)
+        matches_by_sent[sent] = {
+            "certainty_boosters": booster_hits,
+            "booster_count": len(booster_hits),
+        }
+    return matches_by_sent

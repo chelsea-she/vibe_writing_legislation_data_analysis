@@ -1,8 +1,11 @@
 # Need helper functions from utils.py
 import utils
 import json
+import spacy
 
 from sentence_transformers import SentenceTransformer, util
+from spacy.matcher import PhraseMatcher
+from scipy.spatial.distance import cosine
 
 
 ###### Helper Functions for Semantic Expansion #####
@@ -307,3 +310,323 @@ def compute_conceptual_understanding(actions_lst):
             action["conceptual_understanding_score"] = (
                 0.6 * action["validity_score"] + 0.4 * action["confidence_score"]
             )
+
+
+##### Krathwohl’s Revised Bloom’s Taxonomy Helper Function #####
+nlp = spacy.load("en_core_web_sm")
+
+remember_verbs = [
+    "Bookmarking",
+    "Bullet pointing",
+    "Copying",
+    "Defining",
+    "Describing",
+    "Duplicating",
+    "Favouring",
+    "Finding",
+    "Googling",
+    "Highlighting",
+    "Identifying",
+    "Labelling",
+    "Liking",
+    "Listening",
+    "Listing",
+    "Locating",
+    "Matching",
+    "Memorizing",
+    "Naming",
+    "Networking",
+    "Numbering",
+    "Placing",
+    "Quoting",
+    "Recalling",
+    "Reading",
+    "Reciting",
+    "Recognizing",
+    "Recording",
+    "Retelling",
+    "Repeating",
+    "Retrieving",
+    "Searching",
+    "Selecting",
+    "Tabulating",
+    "Telling",
+    "Visualizing",
+]
+
+understand_verbs = [
+    "Advanced search",
+    "Annotating",
+    "Associating",
+    "Boolean search",
+    "Categorizing",
+    "Classifying",
+    "Commenting",
+    "Comparing",
+    "Contrasting",
+    "Converting",
+    "Demonstrating",
+    "Describing",
+    "Differentiating",
+    "Discussing",
+    "Discovering",
+    "Distinguishing",
+    "Estimating",
+    "Exemplifying",
+    "Explaining",
+    "Expressing",
+    "Extending",
+    "Gathering",
+    "Generalizing",
+    "Grouping",
+    "Identifying",
+    "Indicating",
+    "Inferring",
+    "Interpreting",
+    "Journalling",
+    "Paraphrasing",
+    "Predicting",
+    "Relating",
+    "Subscribing",
+    "Summarizing",
+    "Tagging",
+    "Tweeting",
+]
+
+apply_verbs = [
+    "Acting out",
+    "Administering",
+    "Applying",
+    "Articulating",
+    "Calculating",
+    "Carrying out",
+    "Changing",
+    "Charting",
+    "Choosing",
+    "Collecting",
+    "Completing",
+    "Computing",
+    "Constructing",
+    "Demonstrating",
+    "Determining",
+    "Displaying",
+    "Examining",
+    "Executing",
+    "Explaining",
+    "Implementing",
+    "Interviewing",
+    "Judging",
+    "Editing",
+    "Experimenting",
+    "Hacking",
+    "Loading",
+    "Operating",
+    "Painting",
+    "Playing",
+    "Preparing",
+    "Presenting",
+    "Running",
+    "Sharing",
+    "Sketching",
+    "Uploading",
+    "Using",
+]
+
+analyze_verbs = [
+    "Advertising",
+    "Appraising",
+    "Attributing",
+    "Abridging",
+    "Breaking down",
+    "Calculating",
+    "Categorizing",
+    "Classifying",
+    "Comparing",
+    "Concluding",
+    "Contrasting",
+    "Correlating",
+    "Deconstructing",
+    "Deducing",
+    "Differentiating",
+    "Discriminating",
+    "Dividing",
+    "Distinguishing",
+    "Estimating",
+    "Explaining",
+    "Illustrating",
+    "Inferring",
+    "Integrating",
+    "Linking",
+    "Mashing",
+    "Mind mapping",
+    "Ordering",
+    "Organizing",
+    "Outlining",
+    "Planning",
+    "Pointing out",
+    "Prioritizing",
+    "Questioning",
+    "Separating",
+    "Structuring",
+    "Surveying",
+]
+
+evaluate_verbs = [
+    "Adjudicating",
+    "Arguing",
+    "Assessing",
+    "Checking",
+    "Criticizing",
+    "Commenting",
+    "Concluding",
+    "Considering",
+    "Convincing",
+    "Critiquing",
+    "Debating",
+    "Defending",
+    "Detecting",
+    "Editorializing",
+    "Experimenting",
+    "Grading",
+    "Hypothesizing",
+    "Judging",
+    "Justifying",
+    "Measuring",
+    "Moderating",
+    "Monitoring",
+    "Networking",
+    "Persuading",
+    "Posting",
+    "Predicting",
+    "Rating",
+    "Recommending",
+    "Reflecting",
+    "Reframing",
+    "Reviewing",
+    "Revising",
+    "Scoring",
+    "Supporting",
+    "Testing",
+    "Validating",
+]
+
+create_verbs = [
+    "Adapting",
+    "Animating",
+    "Blogging",
+    "Building",
+    "Collaborating",
+    "Composing",
+    "Constructing",
+    "Designing",
+    "Developing",
+    "Devising",
+    "Directing",
+    "Facilitating",
+    "Filming",
+    "Formulating",
+    "Integrating",
+    "Inventing",
+    "Leading",
+    "Making",
+    "Managing",
+    "Mixing/remixing",
+    "Modifying",
+    "Negotiating",
+    "Originating",
+    "Orating",
+    "Planning",
+    "Podcasting",
+    "Producing",
+    "Programming",
+    "Publishing",
+    "Roleplaying",
+    "Simulating",
+    "Solving",
+    "Structuring",
+    "Video blogging",
+    "Wiki building",
+    "Writing",
+]
+
+
+taxonomy_verb_sets = {
+    "Remember": remember_verbs,
+    "Understand": understand_verbs,
+    "Apply": apply_verbs,
+    "Analyze": analyze_verbs,
+    "Evaluate": evaluate_verbs,
+    "Create": create_verbs,
+}
+
+taxonomy_verb_vectors = {
+    category: [nlp(verb).vector for verb in verbs if nlp(verb).has_vector]
+    for category, verbs in taxonomy_verb_sets.items()
+}
+
+
+def find_closest_category(token):
+    max_sim = -1
+    closest_category = None
+
+    for category, vectors in taxonomy_verb_vectors.items():
+        for vector in vectors:
+            sim = 1 - cosine(token.vector, vector)
+            if sim > max_sim:
+                max_sim = sim
+                closest_category = category
+
+    return closest_category
+
+
+def parse_cognitive_levels(levels):
+    total = 0
+    total += levels["Remember"]
+    total += levels["Understand"] * 2
+    total += levels["Apply"] * 3
+    total += levels["Analyze"] * 4
+    total += levels["Evaluate"] * 5
+    total += levels["Create"] * 6
+    if total == 0:
+        return 0
+    return total / (
+        levels["Remember"]
+        + levels["Understand"]
+        + levels["Apply"]
+        + levels["Analyze"]
+        + levels["Evaluate"]
+        + levels["Create"]
+    )
+
+
+human_sentences_set = set()
+sentence_taxonomy_cache = {}  # maps sentence to taxonomy level dict
+
+
+def compute_cognitive_levels(actions_lst):
+    for action in actions_lst:
+        if action.get("level_1_action_type", "") == "insert_text_human":
+            levels = {k: 0 for k in taxonomy_verb_vectors}
+            all_sentences = utils.sent_tokenize(
+                action["human_sentences_temporal_order"]
+            )
+
+            for sentence in all_sentences:
+                if sentence not in sentence_taxonomy_cache:
+                    # First time seeing this sentence → analyze and cache
+                    sentence_level = {k: 0 for k in taxonomy_verb_vectors}
+                    for token in nlp(sentence):
+                        if token.pos_ == "VERB" and token.has_vector:
+                            category = find_closest_category(token)
+                            if category:
+                                sentence_level[category] += 1
+                    sentence_taxonomy_cache[sentence] = sentence_level
+                    human_sentences_set.add(sentence)
+
+                # Add cached results
+                cached_levels = sentence_taxonomy_cache[sentence]
+                for cat in taxonomy_verb_vectors:
+                    levels[cat] += cached_levels[cat]
+
+            action["level_2_info"]["taxonomy_levels"] = levels
+            action["taxonomy_category_score"] = parse_cognitive_levels(levels)
