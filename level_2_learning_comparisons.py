@@ -329,6 +329,8 @@ def parse_level_2_external_examples(external_dict):
 
 
 def get_relevant_past_suggestions(past_suggestions, writing):
+    if not past_suggestions or not writing:
+        return {}
     # Step 2: Embed all sentences
     embeddings_a = embedding_model.encode(past_suggestions, convert_to_tensor=True)
     embeddings_b = embedding_model.encode(writing, convert_to_tensor=True)
@@ -402,14 +404,47 @@ def classify_text(text):
     return dict(zip(result["labels"], result["scores"]))
 
 
-def parse_classify_text(items_dict):
-    sorted_labels = sorted(items_dict.items(), key=lambda x: x[1], reverse=True)
-    top_label, top_score = sorted_labels[0]
-    second_label, second_score = sorted_labels[1]
+def is_imperative(text):
+    doc = nlp(text.strip())
+    if not doc:
+        return False
 
-    if top_score >= 0.65 and (top_score - second_score) >= 0.15:
+    for token in doc:
+        if token.pos_ == "VERB" and token.dep_ in {"ROOT"}:
+            if token.tag_ == "VB":
+                return True
+        elif token.pos_ in {"NOUN", "PRON"}:
+            break
+
+    return False
+
+
+def syntactic_heuristic(text):
+    text = text.strip()
+    text_lower = text.lower()
+    if text_lower.endswith("?") or re.match(
+        r"(?i)^(who|what|when|where|why|how|is|are|can|do|does|could|would)\b", text
+    ):
+        return "question"
+    elif is_imperative(text):
+        return "imperative"
+    else:
+        return "statement"
+
+
+def parse_classify_text(text):
+    zero_shot_result = classify_text(text)
+    heur_label = syntactic_heuristic(text)
+
+    sorted_scores = sorted(zero_shot_result.values(), reverse=True)
+    top_label, top_score = max(zero_shot_result.items(), key=lambda x: x[1])
+
+    if top_score >= 0.75 and top_label == heur_label:
         return {top_label: top_score}
-    return ""
+    elif top_score < 0.65 or (top_score - sorted_scores[1]) < 0.15:
+        return {heur_label: zero_shot_result.get(heur_label, 0.0)}
+    else:
+        return {top_label: top_score}
 
 
 #### CHECK FOR MULTIPLE PERSPECTIVES ####
@@ -533,7 +568,7 @@ def classify_argument_sentences(paragraph):
                 "score": pred["score"],
             }
         )
-        print(f"'{sent}' → {pred}")
+        # print(f"'{sent}' → {pred}")
     return [r for r in results if r["is_argument"]]
 
 

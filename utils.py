@@ -35,6 +35,24 @@ def sent_tokenize(text):
     return sentences
 
 
+def find_last_punctuation(text):
+    punctuation = ["!?."]
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] in punctuation:
+            return i
+    return 0
+
+
+def find_last_suggestion(text):
+    last_dollar = False
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] == "$" and last_dollar:
+            return i
+        if text[i] == "$":
+            last_dollar = True
+    return 0
+
+
 def get_spacy_similarity(text1, text2, nouns_only=False):
     if nouns_only:
         doc1 = nlp(
@@ -73,8 +91,7 @@ def custom_serializer(obj):
 
 
 def get_filename(folder_name, session_id):
-    file_name = jsonl_names[session_id[:-2]][int(session_id[-1]) - 1]
-    return "pilot_raw_logs/" + folder_name + file_name + ".jsonl"
+    return "formal_raw_logs/" + folder_name + session_id + ".jsonl"
 
 
 background_info = [

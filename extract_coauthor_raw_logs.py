@@ -14,7 +14,7 @@ import os
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Paths to the metadata CSV files
-csv_path = os.path.join(script_dir, "legislation_pilot3.csv")
+csv_path = os.path.join(script_dir, "legislation_formal1.csv")
 
 # Load the metadata from the CSV files
 legislation_csv = pd.read_csv(csv_path)
@@ -24,6 +24,7 @@ legislation_csv = pd.read_csv(csv_path)
 legislation_prompts = ["corporate", "antitrust"]
 
 jsonl_names = {}
+prewriting_jsonl_names = {}
 
 
 def extract_session_ids(df, prompts, prefix):
@@ -47,8 +48,12 @@ def extract_session_ids(df, prompts, prefix):
     """
     for prompt in prompts:
         matching_ids = df[df["prompt_code"] == prompt]["session_id"].tolist()
+        matching_prewriting_ids = df[df["prompt_code"] == prompt][
+            "prewriting_session_id"
+        ].tolist()
         key = f"{prefix}_{prompt}"
         jsonl_names[key] = matching_ids
+        prewriting_jsonl_names[key] = matching_prewriting_ids
 
 
 # Extract session IDs for prompts
@@ -78,6 +83,36 @@ def get_logs(jsonl_names_dict, logs_folder_path):
         - Prints error messages for files that cannot be found or processed.
     """
     result = {}
+    for key, prewriting_session_ids in prewriting_jsonl_names.items():
+        for i, prewriting_session_id in enumerate(prewriting_session_ids):
+            # Construct the filename for the current session
+            filename = f"prewriting_logs/{prewriting_session_id}.jsonl"
+            filepath = os.path.join(logs_folder_path, filename)
+            try:
+                # Read and parse the JSONL file
+                with open(filepath, "r") as file:
+                    raw_logs = [json.loads(line) for line in file]
+                # Filter out 'system-initialize' events
+                filtered_logs = [
+                    log
+                    for log in raw_logs
+                    if log.get("eventName") != "system-initialize"
+                ]
+                last_log = {
+                    "eventName": "NEXT_CLICKED",
+                    "eventSource": "user",
+                    "eventTimestamp": filtered_logs[-1]["eventTimestamp"] + 100,
+                }
+                filtered_logs.append(last_log)
+                # Create a unique key for each session and store the parsed logs
+                result[f"{key}_{i + 1}"] = filtered_logs
+            except FileNotFoundError:
+                print(f"File not found: {filepath}")
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON in file {filepath}: {e}")
+            except Exception as e:
+                print(f"Error processing file {filepath}: {e}")
+
     for key, session_ids in jsonl_names_dict.items():
         for i, session_id in enumerate(session_ids):
             # Construct the filename for the current session
@@ -94,7 +129,7 @@ def get_logs(jsonl_names_dict, logs_folder_path):
                     if log.get("eventName") != "system-initialize"
                 ]
                 # Create a unique key for each session and store the parsed logs
-                result[f"{key}_{i + 1}"] = filtered_logs
+                result[f"{key}_{i + 1}"].extend(filtered_logs)
             except FileNotFoundError:
                 print(f"File not found: {filepath}")
             except json.JSONDecodeError as e:
@@ -106,10 +141,10 @@ def get_logs(jsonl_names_dict, logs_folder_path):
 
 # Define the path to the folder containing JSONL files
 # The 'coauthor-v1.0' folder was downloaded directly from the CoAuthor website.
-folder_path_to_logs = os.path.join(script_dir, "pilot_raw_logs")
+folder_path_to_logs = os.path.join(script_dir, "formal_raw_logs")
 
 # Define the output path for raw logs
-output_file_path = os.path.join(script_dir, "pilot3_logs.json")
+output_file_path = os.path.join(script_dir, "formal1_logs.json")
 
 try:
     # Get raw logs
