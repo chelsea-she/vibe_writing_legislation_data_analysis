@@ -1,4 +1,8 @@
 # Need helper functions from utils.py
+import sys
+
+sys.path.append("MOOSE-AES")
+
 import utils
 import json
 import spacy
@@ -6,6 +10,9 @@ import spacy
 from sentence_transformers import SentenceTransformer, util
 from spacy.matcher import PhraseMatcher
 from scipy.spatial.distance import cosine
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch
+import numpy as np
 
 
 ###### Helper Functions for Semantic Expansion #####
@@ -630,3 +637,60 @@ def compute_cognitive_levels(actions_lst):
 
             action["level_2_info"]["taxonomy_levels"] = levels
             action["taxonomy_category_score"] = parse_cognitive_levels(levels)
+
+
+model_name = "KevSun/Engessay_grading_ML"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
+
+def compute_organization_score(actions_lst):
+    for action in actions_lst:
+        if action.get("level_1_action_type") == "insert_text_human":
+            essay = action.get("sentences_temporal_order_without_prompts", "")
+
+            # Limit to last 400 characters/tokens for processing
+            if len(essay) > 400:
+                essay = essay[-400:]
+
+            # Tokenize the essay text
+            inputs = tokenizer(
+                essay,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,  # This is in tokens
+            )
+
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            pred = outputs.logits.squeeze().numpy()
+
+            trait_names = [
+                "cohesion",
+                "syntax",
+                "vocabulary",
+                "phraseology",
+                "grammar",
+                "conventions",
+            ]
+
+            # Normalize logits to a 1–5 scale using min-max scaling
+            min_val, max_val = pred.min(), pred.max()
+            if min_val == max_val:
+                scaled = [3.0] * len(trait_names)  # neutral value
+            else:
+                scaled = 1 + 4 * (pred - min_val) / (max_val - min_val)
+
+            # Round to nearest 0.5 for interpretability
+            rounded = np.round(np.array(scaled) * 2) / 2
+
+            # Save scores
+            essay_dict = dict(zip(trait_names, rounded))
+            org_score = essay_dict.get("cohesion", 0.0)
+
+            action.setdefault("level_2_info", {})
+            action["level_2_info"]["essay_scores"] = essay_dict
+            action["organization_score"] = float(org_score)

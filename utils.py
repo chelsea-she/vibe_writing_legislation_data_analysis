@@ -13,17 +13,28 @@ import re
 import pandas as pd
 import os
 from extract_coauthor_raw_logs import jsonl_names
+import numpy as np
 
 
 def sent_tokenize(text):
     # Normalize multiple whitespace to single spaces
     text = re.sub(r"\s+", " ", text.strip())
-    # Pattern looks for sentence boundaries
+
+    # First, extract all $...$ segments and replace them with placeholders
+    dollar_extracted = []
+
+    def replace_dollar(match):
+        full_match = match.group(0)  # includes the dollar signs
+        dollar_extracted.append(full_match)
+        return f"[[DOLLAR_{len(dollar_extracted)-1}]]"
+
+    text = re.sub(r"\$[^$]+\$", replace_dollar, text)
+
+    # Split on sentence-ending punctuation
     pattern = r"([.?!]+)(?=\s|$)"
-    # Split using the above pattern (text and its punctuation at the end)
     pieces = re.split(pattern, text)
 
-    # Reconstruct sentences by pairing each text chunk with its trailing punctuation
+    # Reconstruct sentences
     sentences = []
     for i in range(0, len(pieces), 2):
         sentence = pieces[i].strip()
@@ -32,7 +43,18 @@ def sent_tokenize(text):
         if sentence:
             sentences.append(sentence.strip())
 
-    return sentences
+    # Replace placeholders with original $...$ chunks as full sentences
+    final_sentences = []
+    for sentence in sentences:
+        parts = re.split(r"(\[\[DOLLAR_\d+\]\])", sentence)
+        for part in parts:
+            match = re.match(r"\[\[DOLLAR_(\d+)\]\]", part)
+            if match:
+                final_sentences.append(dollar_extracted[int(match.group(1))].strip())
+            elif part.strip():
+                final_sentences.append(part.strip())
+
+    return final_sentences
 
 
 def find_last_punctuation(text):
@@ -51,6 +73,24 @@ def find_last_suggestion(text):
         if text[i] == "$":
             last_dollar = True
     return 0
+
+
+def extract_prompt(text):
+    second = text.rfind("$")
+    first = text[:second].rfind("$")
+    if first != -1 and second != -1:
+        return text[first + 1 : second].strip()
+    return None
+
+
+def shorten_tokenizer(text, tokenizer):
+    tokens = tokenizer.tokenize(joined_args)
+
+    if len(tokens) > 450:
+        tokens = tokens[-450:]
+
+    # Decode back to string
+    joined_args = tokenizer.convert_tokens_to_string(tokens)
 
 
 def get_spacy_similarity(text1, text2, nouns_only=False):
@@ -85,6 +125,10 @@ def convert_string_to_timestamp(date_string):
 
 
 def custom_serializer(obj):
+    if isinstance(obj, (np.float32, np.float64)):
+        return float(obj)
+    if isinstance(obj, (np.int32, np.int64)):
+        return int(obj)
     if isinstance(obj, datetime):
         return obj.isoformat()
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")

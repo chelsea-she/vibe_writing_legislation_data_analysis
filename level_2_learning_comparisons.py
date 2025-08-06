@@ -19,38 +19,39 @@ import re
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 stance = pipeline("zero-shot-classification", model="roberta-large-mnli")
+nli_tokenizer = AutoTokenizer.from_pretrained("roberta-large-mnli")
 
 
-def get_stance_difference(pre_writing, writing):
-    trunc_pre = pre_writing
-    if len(pre_writing) > 490:
-        trunc_pre = pre_writing[:490]
+def get_stance_difference(past_args, prompt):
+    joined_args = past_args
+
+    hypothesis_template = f"This text {{}} with the view that: {joined_args}"
+
     result = stance(
-        writing,
+        prompt,
         candidate_labels=["agrees", "disagrees", "neutral"],
-        hypothesis_template="This text {} with the view that: " + trunc_pre,
+        hypothesis_template=hypothesis_template,
     )
     return result
 
 
 # Load pre-trained NLI model
-nli_tokenizer = AutoTokenizer.from_pretrained("roberta-large-mnli")
 nli_model = AutoModelForSequenceClassification.from_pretrained("roberta-large-mnli").to(
     device
 )
 
 
-def get_NLI(pre_writing, writing):
-    trunc_pre = pre_writing
-    if len(pre_writing) > 490:
-        trunc_pre = pre_writing[:490]
-        inputs = nli_tokenizer.encode_plus(
-            trunc_pre, writing, return_tensors="pt", truncation=True, max_length=512
-        )
-    else:
-        inputs = nli_tokenizer.encode_plus(
-            pre_writing, writing, return_tensors="pt", truncation=True, max_length=512
-        )
+def get_NLI(past_args, prompt):
+    joined_args = past_args
+    print(nli_tokenizer.tokenize(joined_args))
+
+    inputs = nli_tokenizer.encode_plus(
+        joined_args,
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+    )
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
     # Predict
@@ -76,16 +77,6 @@ def get_NLI(pre_writing, writing):
 
     # print(f"\nPredicted relationship: {predicted}")
     return predicted, labelDict
-
-
-def parse_level_2_vibe_writing(stance, nli):
-    if stance == "disagrees" and nli == "contradiction":
-        return 1
-    elif stance == "disagrees":
-        return 0.5
-    elif nli == "contradiction":
-        return 0.5
-    return 0
 
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -221,41 +212,18 @@ nlp = spacy.load("en_core_web_sm")
 
 # Trigger phrases that often signal external examples
 trigger_phrases = [
-    "according to",
-    "a study",
-    "a study found",
-    "research shows",
-    "evidence indicates",
-    "suggests",
-    "appears",
-    "indicates",
-    "in [year]",
-    "historically",
-    "data indicates",
-    "during [event]",
-    "a recent report",
-    "the [organization] found",
-    "a survey found",
-    "statistics show",
-    "the [Supreme Court/DOJ/Company] argues",
+    "as part of that",
+    "first",
     "for example",
     "for instance",
-    "such as",
-    "consider",
-    "namely",
-    "to illustrate",
-    "an example of this is",
-    "over [number]%",
-    "the majority of",
-    "a large portion",
-    "more than",
-    "less than",
-    "a significant number",
-    "critics argue",
-    "proponents claim",
-    "others argue",
-    "some believe that",
+    "for one",
+    "in fact",
+    "in particular",
+    "in this case",
+    "indeed",
+    "specifically",
 ]
+
 
 # Build trigger matcher
 matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
@@ -264,17 +232,11 @@ matcher.add("TriggerPhrase", patterns)
 
 
 def get_external_example(essay):
-    # Process text
-    doc = nlp(essay)
-
-    # Split into sentences
-    sentences = list(doc.sents)
-
     results_dict = {}
 
     # Analyze each sentence
-    for sent in sentences:
-        sent_doc = nlp(sent.text)
+    for sent in essay:
+        sent_doc = nlp(sent)
 
         # NER entities
         entities = [ent.label_ for ent in sent_doc.ents]
@@ -289,18 +251,12 @@ def get_external_example(essay):
         has_trigger = len(matches) > 0
 
         # Decision rules
-        if (
-            entity_types.intersection(
-                {"PERSON", "ORG", "DATE", "EVENT", "LAW", "GPE", "WORK_OF_ART"}
-            )
-            or proper_noun_count >= 1
-            or has_trigger
-        ):
+        if proper_noun_count >= 1 or has_trigger:
             external = True
         else:
             external = False
 
-        results_dict[sent.text.strip()] = {
+        results_dict[sent.strip()] = {
             "entities": entities,
             "proper_nouns": proper_nouns,
             "has_trigger": has_trigger,
@@ -444,60 +400,51 @@ def parse_classify_text(text):
     elif top_score < 0.65 or (top_score - sorted_scores[1]) < 0.15:
         return {heur_label: zero_shot_result.get(heur_label, 0.0)}
     else:
-        return {top_label: top_score}
+        return {heur_label: zero_shot_result.get(heur_label, 0.0)}
 
 
 #### CHECK FOR MULTIPLE PERSPECTIVES ####
 connective_categories = {
-    "Contingency_Cause": [
-        "because",
-        "because of",
-        "due to",
-        "so",
-        "consequently",
-        "therefore",
-        "thus",
-        "accordingly",
-        "hence",
-        "as a result",
-        "thereby",
-        "that’s why",
-    ],
     "Comparison": [
-        "but",
-        "however",
         "although",
-        "even though",
-        "though",
+        "as though",
+        "but",
+        "by comparison",
+        "by contrast",
+        "conversely",
+        "despite",
+        "furthermore",
+        "granted",
+        "however",
+        "if",
+        "in contrast",
+        "in fact",
+        "indeed",
+        "much as",
         "nevertheless",
         "nonetheless",
-        "still",
-        "yet",
-        "whereas",
-        "conversely",
+        "nor",
         "on the contrary",
-        "in contrast",
-        "by contrast",
-        "on the one hand",
         "on the other hand",
+        "rather",
+        "regardless",
+        "still",
+        "then",
+        "though",
+        "while",
+        "whereas",
+        "yet",
     ],
-    "Expansion_Conjunction": [
-        # "and",
-        "also",
-        "furthermore",
-        "moreover",
-        "additionally",
-        "likewise",
-        "similarly",
-        "indeed",
-        "besides",
-        "in addition",
-        "further",
+    "Expansion": [
+        "or",
+        "alternatively",
+        "otherwise",
+        "instead",
+        "either",
+        "else",
+        "except",
+        "separately",
     ],
-    "Expansion_Instantiation": ["for example", "for instance", "such as"],
-    # "Expansion_Alternative": ["or", "either"],
-    "Expansion_Exception": ["except", "except that"],
-    "Expansion_Specification": ["specifically", "in particular"],
 }
 
 matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
@@ -587,7 +534,7 @@ def parse_argument_sentences(arguments, all_distinct_arguments):
             emb2 = model.encode(argInfo["sentence"], convert_to_tensor=True)
 
             similarity = util.pytorch_cos_sim(emb1, emb2).item()
-            if similarity >= 0.8:
+            if similarity >= 0.75:
                 isNew = False
                 break
             i += 1
@@ -602,23 +549,44 @@ def parse_argument_sentences(arguments, all_distinct_arguments):
 #### CHECK FOR METACOGNITION ####
 metacognitive_verbs = [
     "assume",
-    "discover",
-    "realize",
-    "decide",
-    "imagine",
+    "agree",
+    "attempt",
     "believe",
-    "know",
-    "think",
-    "guess",
-    "say",
-    "ask",
-    "tell",
-    "infer",
-    "hypothesize",
-    "conclude",
+    "care",
+    "confuse",
+    "decide",
+    "determine",
+    "digest",
+    "discover",
     "doubt",
-    "interpret",
-    "predict",
+    "enjoy",
+    "expect",
+    "feel",
+    "figure",
+    "find",
+    "forget",
+    "guess",
+    "hope",
+    "ignore",
+    "imagine",
+    "know",
+    "learn",
+    "like",
+    "love",
+    "mistook",
+    "notice",
+    "plan",
+    "pretend",
+    "realize",
+    "reflect",
+    "refuse",
+    "remember",
+    "see",
+    "supress",
+    "think",
+    "understand",
+    "want",
+    "wonder",
 ]
 first_person_pronouns = ["i", "we", "my", "me", "our", "us", "myself", "ourselves"]
 
