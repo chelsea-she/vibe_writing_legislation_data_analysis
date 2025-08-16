@@ -43,7 +43,7 @@ nli_model = AutoModelForSequenceClassification.from_pretrained("roberta-large-mn
 
 def get_NLI(past_args, prompt):
     joined_args = past_args
-    print(nli_tokenizer.tokenize(joined_args))
+    # print(nli_tokenizer.tokenize(joined_args))
 
     inputs = nli_tokenizer.encode_plus(
         joined_args,
@@ -611,32 +611,217 @@ def detect_first_person_metacognitive_phrases(insert_sents):
 
 
 #### CHECK FOR COGNITIVE & EMOTIONAL ENGAGEMENT ####
-hedge_words = [
-    "maybe",
-    "perhaps",
-    "probably",
-    "likely",
-    "arguably",
-    "suppose",
-    "seems",
-    "might",
-    "may",
-    "suggest",
-    "assume",
-]
+hedges = set(
+    {  ##VERBS
+        "suggest",
+        "believe",
+        "appear",
+        "indicate",
+        "assume",
+        "seem",
+        "consider",
+        "doubt",
+        "estimate",
+        "expect",
+        "feel",
+        "guess",
+        "imagine",
+        "speculate",
+        "suppose",
+        "think",
+        "understand",
+        "imply",
+        "presume",
+        "suspect",
+        "postulate",
+        "reckon",
+        "infer",
+        "hope",
+        ##ADVERBS
+        "rather",
+        "slightly",
+        "barely",
+        "strictly",
+        "presumably",
+        "fairly",
+        "theoretically",
+        "basically",
+        "relatively",
+        "possibly",
+        "preferably",
+        "slenderly",
+        "scantily",
+        "decidedly",
+        "arguably",
+        "seemingly",
+        "occasionally",
+        "partially",
+        "partly",
+        "practically",
+        "roughly",
+        "virtually",
+        "allegedly",
+        ##ADJECTIVES
+        "presumable",
+        "possible",
+        "probably",
+        "likely",
+        "apparent",
+        "probable",
+        "improbable",
+        "unlikely",
+        "rarely",
+        "improbably",
+        "unclearly",
+        "unsure",
+        "sure",
+        "chance",
+        "unclear",
+        ##VERBS
+        "may",
+        "might",
+        "maybe",
+        "shall",
+        "should",
+        "can",
+        "could",
+        "would",
+        "ought",
+    }
+)
 
-booster_words = ["definitely", "clearly", "absolutely", "certainly", "undoubtedly"]
-
-hedging_phrases = [
-    "in my opinion",
-    "i think",
-    "i believe",
-    "it seems",
-    "i don't know",
-    "i guess",
-    "you know",
-    "as far as i know",
-]
+boosters = set(
+    {
+        "clearly",
+        "obviously",
+        "certainly",
+        "fact that",
+        "show",
+        "actually",
+        "must",
+        "of course",
+        "absolutely",
+        "always",
+        "apparently",
+        "assuredly",
+        "categorically",
+        "compelling",
+        "completely",
+        "comprehensively",
+        "conclude that",
+        "conclusively",
+        "confirmed",
+        "confirmation",
+        "considerabley",
+        "consistently",
+        "conspicuously",
+        "constantly",
+        "convincingly",
+        "corroboratetion",
+        "crediblely",
+        "crucially",
+        "decisively",
+        "definitely",
+        "definitively",
+        "demonstrate",
+        "deservedly",
+        "distinctively",
+        "doubtlessly",
+        "enhanced",
+        "entirely",
+        "especially",
+        "essentially",
+        "establish",
+        "evidently",
+        "exceptionally",
+        "exhaustively",
+        "extensively",
+        "extraordinary",
+        "extremely",
+        "the fact that",
+        "find that",
+        "found that",
+        "firmly",
+        "forcefully",
+        "fully",
+        "strikingly",
+        "successfully",
+        "fundamentally",
+        "genuinely",
+        "great",
+        "highlight",
+        "highly",
+        "impossible",
+        "impressively",
+        "incontrovertible",
+        "indispensablely",
+        "inevitabley",
+        "in fact",
+        "manifestly",
+        "markedly",
+        "meaningfully",
+        "necessarily",
+        "never",
+        "notabley",
+        "noteworthy",
+        "noticeabley",
+        "outstanding",
+        "particularly",
+        "perfectly",
+        "persuasively",
+        "plainly",
+        "powerful",
+        "precisely",
+        "profoundly",
+        "prominently",
+        "proof",
+        "proved",
+        "quite",
+        "radically",
+        "really",
+        "reliably",
+        "remarkablely",
+        "rigorously",
+        "safely",
+        "securely",
+        "self-evident",
+        "sizablely",
+        "superior",
+        "surely",
+        "thoroughly",
+        "totally",
+        "truly",
+        "unambiguously",
+        "unarguably",
+        "unavoidabley",
+        "undeniabley",
+        "undoubtedly",
+        "unequivocally",
+        "uniquely",
+        "unlimited",
+        "unmistakablely",
+        "unprecedented",
+        "unquestionably",
+        "uphold",
+        "upheld",
+        "vastly",
+        "vitally",
+        "we know",
+        "well-known",
+        "indeed",
+        "no doubt",
+        "prove",
+        "honestly",
+        "mostly",
+        "largely",
+        "sure",
+        "like i said",
+        "as i say",
+        "nonetheless",
+        "mainly",
+        "nevertheless",
+    }
+)
 
 
 def jaccard_similarity(set1, set2):
@@ -652,21 +837,9 @@ def detect_hedging_labeled(text_sents, threshold=0.5):
         hedge_types = []
 
         # Check hedge words
-        for word in hedge_words:
+        for word in hedges:
             if word in sent_tokens:
-                hedge_types.append({"type": "hedge_word", "trigger_word": word})
-
-        # Check negated boosters
-        for booster in booster_words:
-            if f"not {booster}" in sent.lower() or f"n't {booster}" in sent.lower():
-                hedge_types.append({"type": "booster_negated", "trigger_word": booster})
-
-        # Check hedging phrases with Jaccard
-        for phrase in hedging_phrases:
-            phrase_tokens = set(phrase.split())
-            sim = jaccard_similarity(sent_tokens, phrase_tokens)
-            if sim >= threshold:
-                hedge_types.append({"type": "hedging_phrase", "trigger_word": phrase})
+                hedge_types.append({"type": "hedge", "trigger_word": word})
 
         matches_by_sent[sent] = {"hedge_types": hedge_types}
 
@@ -681,7 +854,7 @@ def detect_certainty(text_sents):
     matches_by_sent = {}
     for sent in text_sents:
         booster_hits = []
-        for booster in booster_words:
+        for booster in boosters:
             if booster in sent.lower():
                 booster_hits.append(booster)
         matches_by_sent[sent] = {
@@ -689,3 +862,99 @@ def detect_certainty(text_sents):
             "booster_count": len(booster_hits),
         }
     return matches_by_sent
+
+
+###SEMANTIC DIFFERENCE FUNCTIONS###
+MIN_INSERT_WORD_COUNT = 10
+MAJOR_INSRT_MAX_SIMILARITY = 0.9
+MINOR_INSRT_MAX_SIMILARITY = 0.95
+MAX_SIMILARITY = 0.95
+
+
+def get_similarity_with_prev_writing_for_level_2(action, prev_writing, similarity_fcn):
+    prev_sents = utils.sent_tokenize(prev_writing)
+    curr_sents = utils.sent_tokenize(action["action_end_writing"])
+    select_sents_after_action = action["action_modified_sentences"]
+    similarity = abs(
+        similarity_fcn(" ".join(select_sents_after_action), " ".join(prev_sents))
+    )
+    return similarity, {
+        "select_sents_before_action": prev_sents,
+        "select_sents_after_action": select_sents_after_action,
+    }
+
+
+def parse_level_2_major_insert_major_semantic_diff(
+    action,
+    prev_writing_similarity,
+    MIN_INSERT_WORD_COUNT=MIN_INSERT_WORD_COUNT,
+    MAJOR_INSRT_MAX_SIMILARITY=MAJOR_INSRT_MAX_SIMILARITY,
+):
+    if (
+        action["action_type"] == "insert_text_human"
+        and action["action_delta"] != ""
+        and action["action_delta"][-1] >= MIN_INSERT_WORD_COUNT
+    ):
+        return prev_writing_similarity <= MAJOR_INSRT_MAX_SIMILARITY
+    return False
+
+
+def parse_level_2_major_insert_minor_semantic_diff(
+    action,
+    prev_writing_similarity,
+    MIN_INSERT_WORD_COUNT=MIN_INSERT_WORD_COUNT,
+    MAJOR_INSRT_MAX_SIMILARITY=MAJOR_INSRT_MAX_SIMILARITY,
+):
+    if (
+        action["action_type"] == "insert_text_human"
+        and action["action_delta"] != ""
+        and action["action_delta"][-1] >= MIN_INSERT_WORD_COUNT
+    ):
+        return prev_writing_similarity > MAJOR_INSRT_MAX_SIMILARITY
+    return False
+
+
+def parse_level_2_minor_insert_major_semantic_diff(
+    action,
+    prev_writing_similarity,
+    MIN_INSERT_WORD_COUNT=MIN_INSERT_WORD_COUNT,
+    MINOR_INSRT_MAX_SIMILARITY=MINOR_INSRT_MAX_SIMILARITY,
+):
+    if (
+        action["action_type"] == "insert_text_human"
+        and action["action_delta"] != ""
+        and action["action_delta"][-1] < MIN_INSERT_WORD_COUNT
+    ):
+        return prev_writing_similarity <= MINOR_INSRT_MAX_SIMILARITY
+    return False
+
+
+def parse_level_2_minor_insert_minor_semantic_diff(
+    action,
+    prev_writing_similarity,
+    MIN_INSERT_WORD_COUNT=MIN_INSERT_WORD_COUNT,
+    MINOR_INSRT_MAX_SIMILARITY=MINOR_INSRT_MAX_SIMILARITY,
+):
+    if (
+        action["action_type"] == "insert_text_human"
+        and action["action_delta"] != ""
+        and action["action_delta"][-1] < MIN_INSERT_WORD_COUNT
+    ):
+        return prev_writing_similarity > MINOR_INSRT_MAX_SIMILARITY
+    return False
+
+
+def parse_level_2_delete_major_semantic_diff(
+    action, prev_writing_similarity, MAX_SIMILARITY=MAX_SIMILARITY
+):
+    if action["action_type"] == "delete_text" and action["action_delta"] != "":
+        return prev_writing_similarity <= MAX_SIMILARITY
+    return False
+
+
+def parse_level_2_delete_minor_semantic_diff(
+    action, prev_writing_similarity, MAX_SIMILARITY=MAX_SIMILARITY
+):
+    if action["action_type"] == "delete_text" and action["action_delta"] != "":
+        return prev_writing_similarity > MAX_SIMILARITY
+    return False

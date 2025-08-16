@@ -8,7 +8,7 @@ import pandas as pd
 import json
 import os
 
-a
+
 # The directory of the CSV files (argumentative metadata and creative metadata) is assumed to
 # be the same as this Python script.
 # Please update the `script_dir` variable if the files are located elsewhere
