@@ -31,7 +31,7 @@ def sent_tokenize(text):
     text = re.sub(r"\$[^$]+\$", replace_dollar, text)
 
     # Split on sentence-ending punctuation
-    pattern = r"([.?!]+)(?=\s|$)"
+    pattern = r"((?:(?<!\b[vV])\.)+|[!?]+)(?=\s|$)"
     pieces = re.split(pattern, text)
 
     # Reconstruct sentences
@@ -75,12 +75,17 @@ def find_last_suggestion(text):
     return 0
 
 
-def extract_prompt(text):
-    second = text.rfind("$")
-    first = text[:second].rfind("$")
-    if first != -1 and second != -1:
-        return text[first + 1 : second].strip()
-    return None
+def extract_prompts(text):
+    sentences_tokenized = sent_tokenize(text)
+    prompts = set()
+    for i in range(len(sentences_tokenized)):
+        if (sentences_tokenized[i][0] == "$" and sentences_tokenized[i][-1] == "$") or (
+            i < len(sentences_tokenized) - 1
+            and sentences_tokenized[i][0] == "$"
+            and sentences_tokenized[i + 1][-1] == "$"
+        ):
+            prompts.add(sentences_tokenized[i])
+    return prompts
 
 
 def shorten_tokenizer(text, tokenizer):
