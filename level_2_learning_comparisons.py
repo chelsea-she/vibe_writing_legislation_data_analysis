@@ -16,6 +16,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 from collections import defaultdict
 import re
 
+import pandas as pd
+import numpy as np
+
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 stance = pipeline("zero-shot-classification", model="roberta-large-mnli")
@@ -958,3 +961,71 @@ def parse_level_2_delete_minor_semantic_diff(
     if action["action_type"] == "delete_text" and action["action_delta"] != "":
         return prev_writing_similarity > MAX_SIMILARITY
     return False
+
+
+model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+
+
+def prepare_paragraph_A(A_sents):
+    A_emb = model.encode(
+        A_sents,
+        batch_size=32,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+    return A_emb
+
+
+def compute_novelty_paragraphB_vs_A(
+    A_sents: list,
+    A_emb: np.ndarray,
+    B_sents: list,
+) -> pd.DataFrame:
+    """
+    For each sentence s_k in paragraph B, compute:
+      - max_sim_to_history = max cosine similarity to any sentence in A ∪ B_{<k}
+      - novelty = 1 - max_sim_to_history
+      - best_match text and which paragraph it came from ("A" or "B")
+    Returns a pandas DataFrame with one row per B sentence (in order).
+
+    References:
+      • Online streaming novelty via max-sim to history (ACL/HLT formulation).
+      • SBERT sentence embeddings for cosine similarity (EMNLP 2019).
+    """
+
+    pool_emb = A_emb.copy()
+    pool_src = ["A"] * len(A_sents)
+    pool_txt = A_sents.copy()
+
+    rows = []
+    for k, s in enumerate(B_sents, start=1):
+        v = model.encode(
+            [s],
+            batch_size=32,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )[0]
+
+        # cosine since embeddings are normalized
+        sims = pool_emb @ v  # (N,)
+        best_idx = int(np.argmax(sims))
+        max_sim = float(sims[best_idx])
+
+        novelty = 1.0 - max_sim
+
+        rows.append(
+            {
+                "k": k,
+                "sentence_B": s,
+                "max_sim_to_history": max_sim,
+                "novelty": novelty,
+                "best_match_from": None if best_idx < 0 else pool_src[best_idx],
+                "best_match_text": None if best_idx < 0 else pool_txt[best_idx],
+            }
+        )
+
+        pool_emb = np.vstack([pool_emb, v])
+        pool_src.append("B")
+        pool_txt.append(s)
+
+    return pd.DataFrame(rows)
