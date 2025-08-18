@@ -123,7 +123,7 @@ class MergeActionsAnalyzer:
                 # Cursor operation while inserting => keep merging
                 to_end_action = False
                 log_action = current_action
-            elif log_action == "prewrite_done":
+            elif log_action is None:  # == "prewrite_done":
                 to_end_action = True
                 reset_writing = True
             elif log_action == "delete_text" and current_action == "insert_text":
@@ -349,7 +349,9 @@ class MergeActionsAnalyzer:
                 sentences_temporal_order = []
                 action_start_writing_for_current_action = ""
                 prev_writing_modified = False
-                current_action = "prewrite_done"  # force fresh decision next loop
+                current_action = (
+                    None  # "prewrite_done"  # force fresh decision next loop
+                )
                 current_source = log["eventSource"]
                 start_log_id = i
                 continue  # skip reusing the current log; handle it fresh on next loop

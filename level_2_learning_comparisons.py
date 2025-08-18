@@ -993,39 +993,25 @@ def compute_novelty_paragraphB_vs_A(
       • SBERT sentence embeddings for cosine similarity (EMNLP 2019).
     """
 
-    pool_emb = A_emb.copy()
-    pool_src = ["A"] * len(A_sents)
-    pool_txt = A_sents.copy()
-
     rows = []
+    B_emb = model.encode(
+        B_sents, batch_size=32, convert_to_numpy=True, normalize_embeddings=True
+    )
+    S = B_emb @ A_emb.T
+    best_idx = np.argmax(S, axis=1)
+    max_sim = S[np.arange(S.shape[0]), best_idx]
+    novelty = 1.0 - max_sim
+
     for k, s in enumerate(B_sents, start=1):
-        v = model.encode(
-            [s],
-            batch_size=32,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )[0]
-
-        # cosine since embeddings are normalized
-        sims = pool_emb @ v  # (N,)
-        best_idx = int(np.argmax(sims))
-        max_sim = float(sims[best_idx])
-
-        novelty = 1.0 - max_sim
-
+        bi = int(best_idx[k - 1])
         rows.append(
             {
                 "k": k,
                 "sentence_B": s,
-                "max_sim_to_history": max_sim,
-                "novelty": novelty,
-                "best_match_from": None if best_idx < 0 else pool_src[best_idx],
-                "best_match_text": None if best_idx < 0 else pool_txt[best_idx],
+                "max_sim_to_history": float(max_sim[k - 1]),
+                "novelty": float(novelty[k - 1]),
+                "best_match_from": "A",
+                "best_match_text": A_sents[bi],
             }
         )
-
-        pool_emb = np.vstack([pool_emb, v])
-        pool_src.append("B")
-        pool_txt.append(s)
-
     return pd.DataFrame(rows)
