@@ -31,7 +31,7 @@ def sent_tokenize(text):
     text = re.sub(r"\$[^$]+\$", replace_dollar, text)
 
     # Split on sentence-ending punctuation
-    pattern = r"((?:(?<!\b[vV])\.)+|[!?]+)(?=\s|$)"
+    pattern = r"((?:(?<!\b[vV])(?<!\b\d)(?<!\b\d\d)\.)+|[!?]+)(?=\s|$)"
     pieces = re.split(pattern, text)
 
     # Reconstruct sentences
@@ -76,15 +76,19 @@ def find_last_suggestion(text):
 
 
 def extract_prompts(text):
-    sentences_tokenized = sent_tokenize(text)
-    prompts = set()
-    for i in range(len(sentences_tokenized)):
-        if (sentences_tokenized[i][0] == "$" and sentences_tokenized[i][-1] == "$") or (
-            i < len(sentences_tokenized) - 1
-            and sentences_tokenized[i][0] == "$"
-            and sentences_tokenized[i + 1][-1] == "$"
-        ):
-            prompts.add(sentences_tokenized[i])
+    prompts = []
+    hasFirst = False
+    firstIndex = -1
+    for i in range(len(text)):
+        if text[i] == "$" and (i == len(text) - 1 or not text[i + 1].isdigit()):
+            if hasFirst:
+                prompts.append(text[firstIndex : i + 1])
+                hasFirst = False
+            else:
+                firstIndex = i
+                hasFirst = True
+    if hasFirst:
+        prompts.append(text[firstIndex:])
     return prompts
 
 
