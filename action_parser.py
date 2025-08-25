@@ -61,7 +61,7 @@ class MergeActionsAnalyzer:
             if log_action == "TBD":
                 log_action = "insert_text"
             last_action = {
-                "action_type": log_action,
+                "level_1_action_type": log_action,
                 "action_source": all_logs[0]["eventSource"],
                 "action_logs": [all_logs[0]],
                 "action_start_log_id": 0,
@@ -75,7 +75,7 @@ class MergeActionsAnalyzer:
             }
 
         # Unpack last action
-        current_action = last_action["action_type"]
+        current_action = last_action["level_1_action_type"]
         current_source = last_action["action_source"]
         current_logs = last_action["action_logs"]
         current_start_time = utils.convert_string_to_timestamp(
@@ -205,7 +205,7 @@ class MergeActionsAnalyzer:
 
                         # Finalize the partial insertion
                         action_dct = {
-                            "action_type": current_action,
+                            "level_1_action_type": current_action,
                             "action_source": current_source,
                             "action_logs": current_logs[:latest_delete_logs_start_id],
                             "action_start_log_id": start_log_id,
@@ -300,7 +300,7 @@ class MergeActionsAnalyzer:
 
                 # Finalize the action
                 action_dct = {
-                    "action_type": current_action,
+                    "level_1_action_type": current_action,
                     "action_source": current_source,
                     "action_logs": current_logs,
                     "action_start_log_id": start_log_id,
@@ -395,7 +395,7 @@ class MergeActionsAnalyzer:
             last_delta = ""
 
         action_dct = {
-            "action_type": current_action,
+            "level_1_action_type": current_action,
             "action_source": current_source,
             "action_logs": current_logs,
             "action_start_log_id": start_log_id,
@@ -418,7 +418,7 @@ class MergeActionsAnalyzer:
         all_actions_lst.append(action_dct)
 
         last_action = {
-            "action_type": current_action,
+            "level_1_action_type": current_action,
             "action_source": current_source,
             "action_logs": current_logs,
             "action_start_log_id": start_log_id,

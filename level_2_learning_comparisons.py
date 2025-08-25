@@ -894,7 +894,7 @@ def parse_level_2_major_insert_major_semantic_diff(
     MAJOR_INSRT_MAX_SIMILARITY=MAJOR_INSRT_MAX_SIMILARITY,
 ):
     if (
-        action["action_type"] == "insert_text_human"
+        action["level_2_action_type"] == "human_writes"
         and action["action_delta"] != ""
         and action["action_delta"][-1] >= MIN_INSERT_WORD_COUNT
     ):
@@ -909,7 +909,7 @@ def parse_level_2_major_insert_minor_semantic_diff(
     MAJOR_INSRT_MAX_SIMILARITY=MAJOR_INSRT_MAX_SIMILARITY,
 ):
     if (
-        action["action_type"] == "insert_text_human"
+        action["level_2_action_type"] == "human_writes"
         and action["action_delta"] != ""
         and action["action_delta"][-1] >= MIN_INSERT_WORD_COUNT
     ):
@@ -924,7 +924,7 @@ def parse_level_2_minor_insert_major_semantic_diff(
     MINOR_INSRT_MAX_SIMILARITY=MINOR_INSRT_MAX_SIMILARITY,
 ):
     if (
-        action["action_type"] == "insert_text_human"
+        action["level_2_action_type"] == "human_writes"
         and action["action_delta"] != ""
         and action["action_delta"][-1] < MIN_INSERT_WORD_COUNT
     ):
@@ -939,7 +939,7 @@ def parse_level_2_minor_insert_minor_semantic_diff(
     MINOR_INSRT_MAX_SIMILARITY=MINOR_INSRT_MAX_SIMILARITY,
 ):
     if (
-        action["action_type"] == "insert_text_human"
+        action["level_2_action_type"] == "human_writes"
         and action["action_delta"] != ""
         and action["action_delta"][-1] < MIN_INSERT_WORD_COUNT
     ):
@@ -950,7 +950,7 @@ def parse_level_2_minor_insert_minor_semantic_diff(
 def parse_level_2_delete_major_semantic_diff(
     action, prev_writing_similarity, MAX_SIMILARITY=MAX_SIMILARITY
 ):
-    if action["action_type"] == "delete_text" and action["action_delta"] != "":
+    if action["level_1_action_type"] == "delete_text" and action["action_delta"] != "":
         return prev_writing_similarity <= MAX_SIMILARITY
     return False
 
@@ -958,7 +958,7 @@ def parse_level_2_delete_major_semantic_diff(
 def parse_level_2_delete_minor_semantic_diff(
     action, prev_writing_similarity, MAX_SIMILARITY=MAX_SIMILARITY
 ):
-    if action["action_type"] == "delete_text" and action["action_delta"] != "":
+    if action["level_1_action_type"] == "delete_text" and action["action_delta"] != "":
         return prev_writing_similarity > MAX_SIMILARITY
     return False
 

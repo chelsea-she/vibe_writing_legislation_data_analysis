@@ -53,7 +53,8 @@ def compute_semantic_expansion(actions_lst):
 
         # Only compute expansion for valid insertions
         if (
-            action.get("level_1_action_type") in ["insert_text_human", "insert_text_ai"]
+            action.get("level_2_action_type")
+            in ["human_writes", "human_accepts_AI_suggestion"]
             and action.get("action_delta")
             and action["action_delta"][1].strip()
         ):
@@ -208,13 +209,13 @@ def compute_validity(session_id, actions_lst):
     background_embedding = encoding_model.encode(background, convert_to_tensor=True)
 
     for idx, action in enumerate(actions_lst):
-        level_1_action_type = action.get("level_1_action_type", "")
+        level_2_action_type = action.get("level_2_action_type", "")
         # action_delta = action.get("action_delta", "")
         human_sentences_temporal = action.get("human_sentences_temporal_order", "")
         # level_2_insertion_type = action.get("level_2_insertion_type", "")
 
         # Handle AI inserts
-        if level_1_action_type == "insert_text_human" and human_sentences_temporal:
+        if level_2_action_type == "human_writes" and human_sentences_temporal:
             insert = action["human_sentences_temporal_order"]
             insert_embedding = encoding_model.encode(insert, convert_to_tensor=True)
             score = util.pytorch_cos_sim(insert_embedding, background_embedding).item()
@@ -290,11 +291,11 @@ stance_markers = [
 
 def compute_confidence_linguistic(actions_lst):
     for idx, action in enumerate(actions_lst):
-        level_1_action_type = action.get("level_1_action_type", "")
+        level_2_action_type = action.get("level_2_action_type", "")
         level_2_insertion_type = action.get("level_2_insertion_type", "")
 
         if (
-            level_1_action_type == "insert_text_human"
+            level_2_action_type == "human_writes"
             and level_2_insertion_type
             and "major_insert" in level_2_insertion_type
         ):
@@ -612,7 +613,7 @@ sentence_taxonomy_cache = {}  # maps sentence to taxonomy level dict
 
 def compute_cognitive_levels(actions_lst):
     for action in actions_lst:
-        if action.get("level_1_action_type", "") == "insert_text_human":
+        if action.get("level_2_action_type", "") == "human_writes":
             levels = {k: 0 for k in taxonomy_verb_vectors}
             all_sentences = utils.sent_tokenize(
                 action["human_sentences_temporal_order"]
@@ -646,7 +647,7 @@ model = AutoModelForSequenceClassification.from_pretrained(model_name)
 
 def compute_organization_score(actions_lst):
     for action in actions_lst:
-        if action.get("level_1_action_type") == "insert_text_human":
+        if action.get("level_2_action_type") == "human_writes":
             essay = action.get("sentences_temporal_order_without_prompts", "")
 
             # Limit to last 400 characters/tokens for processing
